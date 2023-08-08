@@ -1,6 +1,7 @@
 const Joi = require('joi');
 const User = require('../models/user');
 const bcrypt = require('bcryptjs');
+const UserDTO = require('../dto/userDTO'); // 
 
 const passwordPattern = new RegExp('^[a-zA-Z0-9]{3,30}$');
 const authController = {
@@ -56,9 +57,55 @@ const authController = {
 
         const user = await userToSave.save();
         // response send
-        return res.status(201).json({user});
+        const userDto = new UserDTO(user);
+
+        return res.status(201).json({user: userDto});
     },
-    async login() {},
+    async login(req,res,next) {
+        // 1. validate user input
+        const userLoginSchema = Joi.object({
+            username: Joi.string().min(3).max(30).required(),
+            password: Joi.string().pattern(passwordPattern).required(),
+        })
+        const {error} = userLoginSchema.validate(req.body);
+
+        // 2. if error in validation return error via middleware
+        if (error){
+            return next(error)
+        }
+        const {username,password} = req.body;
+        // 3. check if user exists // if user exists return error via middleware
+        let user;
+        try{
+             user = await User.findOne({username:username});
+            if(!user) {
+                const error = {
+                    status: 401,
+                    message: 'Invalid username/password'
+                }
+                return next(error);
+            }
+            // match password
+
+            const match =await bcrypt.compare(password,user.password);
+            if(!match) {
+                const error = {
+                    status: 401,
+                    message: 'Invalid password'
+                }
+                return next(error);
+            }
+        }catch(error){
+            return next(error);
+        }
+
+        const userDto = new UserDTO(user);
+        return res.status(200).json({ user: userDto }); /// Now it should return only _id, username, and name.
+        // 4. compare password
+        // 5. if password is correct generate token
+        // 6. send token to user
+
+    },
    
     
 }
